@@ -22,7 +22,7 @@ class TestCommand(Command):
 
 setup(
     name='parse_rest',
-    version='0.2.20170114',
+    version='0.3.20241023',
     description='A client library for Parse.com\'.s REST API',
     url='https://github.com/milesrichardson/ParsePy',
     packages=['parse_rest'],
@@ -37,9 +37,9 @@ setup(
         'Intended Audience :: Developers',
         'License :: OSI Approved :: GNU General Public License v3 (GPLv3)',
         'Operating System :: OS Independent',
-        "Programming Language :: Python :: 2.6",
-        "Programming Language :: Python :: 2.7",
-        "Programming Language :: Python :: 3.3",
-        "Programming Language :: Python :: 3.4",
+        "Programming Language :: Python :: 3.10",
+        "Programming Language :: Python :: 3.11",
+        "Programming Language :: Python :: 3.12",
+        "Programming Language :: Python :: 3.13",
     ]
 )

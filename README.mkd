@@ -67,6 +67,26 @@ MASTER_KEY = '...'
 register(APPLICATION_ID, REST_API_KEY, master_key=MASTER_KEY)
 ~~~~~
 
+The async implementation
+~~~~~ {python}
+import os
+os.environ["PARSE_API_ROOT"] = "http://your_server.com:1337/parse"
+
+# Everything else same as usual
+
+from parse_rest.aiodatatypes import Function, AIOObject, GeoPoint
+from parse_rest.aioconnection import register
+from parse_rest.aioquery import QueryResourceDoesNotExist
+from parse_rest.aioconnection import ParseBatcher
+from parse_rest.core import ResourceRequestBadRequest, ParseError
+
+APPLICATION_ID = '...'
+REST_API_KEY = '...'
+MASTER_KEY = '...'
+
+register(APPLICATION_ID, REST_API_KEY, master_key=MASTER_KEY)
+~~~~~
+
 
 Testing
 -------

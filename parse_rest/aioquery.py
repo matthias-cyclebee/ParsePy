@@ -48,7 +48,7 @@ class QueryManager(object):
     async def _afetch(self, **kw):
         klass = self.model_class
         uri = self.model_class.ENDPOINT_ROOT
-        return [klass(**it) async for it in klass.GET(uri, **kw).get('results')]
+        return [klass(**it) async for it in (await klass.GET(uri, **kw)).get('results')]
 
     def _count(self, **kw):
         kw.update({"count": 1})

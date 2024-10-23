@@ -37,6 +37,41 @@ def register(app_id, rest_key, **kw):
         'rest_key': rest_key
         }
     ACCESS_KEYS.update(**kw)
+    if "master_key" in ACCESS_KEYS:
+        header = {
+                'Content-type': 'application/json',
+                'X-Parse-Application-Id': ACCESS_KEYS['app_id'],
+                'X-Parse-REST-API-Key': ACCESS_KEYS['rest_key'],
+                'X-Parse-Master-Key': ACCESS_KEYS['master_key']
+            }
+        http_session = aiohttp.ClientSession(headers=header)
+        ACCESS_KEYS.update({'http_session': http_session})
+    elif "token" in ACCESS_KEYS:
+        header = {
+            'Content-type': 'application/json',
+            'X-Parse-Application-Id': ACCESS_KEYS['app_id'],
+            'X-Parse-REST-API-Key': ACCESS_KEYS['rest_key'],
+            'X-Parse-Session-Token': self.token
+        }
+        http_session = aiohttp.ClientSession(headers=header)
+        ACCESS_KEYS.update({'http_session': http_session})
+        ACCESS_KEYS.update({'session_token': self.token})
+    else:
+        header = {
+            'Content-type': 'application/json',
+            'X-Parse-Application-Id': ACCESS_KEYS['app_id'],
+            'X-Parse-REST-API-Key': ACCESS_KEYS['rest_key']
+        }
+        http_session = aiohttp.ClientSession(headers=header)
+        ACCESS_KEYS.update({'http_session': http_session})
+        
+def unregister():
+    global ACCESS_KEYS
+    if 'http_session' in ACCESS_KEYS:
+        ACCESS_KEYS['http_session'].close()
+    ACCESS_KEYS = {}
+
+    
 
 
 class SessionToken:
@@ -78,7 +113,6 @@ class MasterKey:
 
     def __exit__(self, type, value, traceback):
         del ACCESS_KEYS['master_key']
-    
     
 
 
@@ -149,6 +183,8 @@ class ParseBase(object):
 
         request.get_method = lambda: http_verb
 
+        result = None
+        response = None
         try:
             if http_verb == 'GET':
                 response = await ACCESS_KEYS['http_session'].get(url, headers=headers, timeout=CONNECTION_TIMEOUT)
@@ -158,6 +194,10 @@ class ParseBase(object):
                 response = await ACCESS_KEYS['http_session'].put(url, data=data, headers=headers, timeout=CONNECTION_TIMEOUT)
             elif http_verb == 'DELETE':
                 response = await ACCESS_KEYS['http_session'].delete(url, headers=headers, timeout=CONNECTION_TIMEOUT)
+            else:
+                raise core.ParseError('Unknown HTTP verb %s' % http_verb)
+            if response:
+                result = await response.read()
         except HTTPError as e:
             exc = {
                 400: core.ResourceRequestBadRequest,
@@ -166,8 +206,28 @@ class ParseBase(object):
                 404: core.ResourceRequestNotFound
                 }.get(e.code, core.ParseError)
             raise exc(e.read())
+        result = json.loads(result.decode('utf-8'))
+        class AsyncDictIterator:
+            def __init__(self, result):
+                self.result = result
+                self.index = 0
+            async def __aiter__(self):
+                for k,v in self.result.items():
+                    yield k,v
 
-        return json.loads(await response.read().decode('utf-8'))
+        class AsyncListIterator:
+            def __init__(self, result):
+                self.result = result
+                self.index = 0
+            async def __aiter__(self):
+                for item in self.result:
+                    yield item
+        if isinstance(result, dict):
+            return {"results": AsyncListIterator(result['results'])}
+        elif isinstance(result, list):
+            return AsyncListIterator(result)
+        else:
+            return result
 
     @classmethod
     async def GET(cls, uri, **kw):

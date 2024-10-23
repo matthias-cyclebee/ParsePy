@@ -11,6 +11,7 @@
 #    You should have received a copy of the GNU General Public License
 #    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+import aiohttp
 from six.moves.urllib.request import Request, urlopen
 from six.moves.urllib.error import HTTPError
 from six.moves.urllib.parse import urlencode, urlparse
@@ -20,7 +21,6 @@ import json
 from parse_rest import core
 
 import os
-
 API_ROOT = os.environ.get('PARSE_API_ROOT') or 'https://api.parse.com/1'
 
 ACCESS_KEYS = {}
@@ -49,7 +49,7 @@ class SessionToken:
             'Content-type': 'application/json',
             'X-Parse-Application-Id': ACCESS_KEYS['app_id'],
             'X-Parse-REST-API-Key': ACCESS_KEYS['rest_key'],
-            'X-Parse-Session-Token', self.token
+            'X-Parse-Session-Token': self.token
         }
         http_session = aiohttp.ClientSession(headers=header)
         ACCESS_KEYS.update({'http_session': http_session})
@@ -57,6 +57,7 @@ class SessionToken:
 
     def __exit__(self, type, value, traceback):
         del ACCESS_KEYS['session_token']
+            
 
 
 class MasterKey:
@@ -71,12 +72,14 @@ class MasterKey:
             'X-Parse-REST-API-Key': ACCESS_KEYS['rest_key'],
             'X-Parse-Master-Key': self.master_key
         }
-	    http_session = aiohttp.ClientSession(headers=header)
+        http_session = aiohttp.ClientSession(headers=header)
         ACCESS_KEYS.update({'http_session': http_session})
         return ACCESS_KEYS.update({'master_key': self.master_key})
 
     def __exit__(self, type, value, traceback):
         del ACCESS_KEYS['master_key']
+    
+    
 
 
 def master_key_required(func):
@@ -115,6 +118,16 @@ class ParseBase(object):
         if not ('app_id' in ACCESS_KEYS and 'rest_key' in ACCESS_KEYS):
             raise core.ParseError('Missing connection credentials')
 
+        app_id = ACCESS_KEYS.get('app_id')
+        rest_key = ACCESS_KEYS.get('rest_key')
+        master_key = ACCESS_KEYS.get('master_key')
+        headers = {
+            'Content-type': 'application/json',
+            'X-Parse-Application-Id': app_id,
+            'X-Parse-REST-API-Key': rest_key
+        }
+        headers.update(extra_headers or {})
+        
         url = uri if uri.startswith(API_ROOT) else cls.ENDPOINT_ROOT + uri
         if _body is None:
             data = kw and json.dumps(kw, default=date_handler) or "{}"
@@ -137,7 +150,14 @@ class ParseBase(object):
         request.get_method = lambda: http_verb
 
         try:
-            response = await urlopen(request, timeout=CONNECTION_TIMEOUT)
+            if http_verb == 'GET':
+                response = await ACCESS_KEYS['http_session'].get(url, headers=headers, timeout=CONNECTION_TIMEOUT)
+            elif http_verb == 'POST':
+                response = await ACCESS_KEYS['http_session'].post(url, data=data, headers=headers, timeout=CONNECTION_TIMEOUT)
+            elif http_verb == 'PUT':
+                response = await ACCESS_KEYS['http_session'].put(url, data=data, headers=headers, timeout=CONNECTION_TIMEOUT)
+            elif http_verb == 'DELETE':
+                response = await ACCESS_KEYS['http_session'].delete(url, headers=headers, timeout=CONNECTION_TIMEOUT)
         except HTTPError as e:
             exc = {
                 400: core.ResourceRequestBadRequest,
@@ -150,15 +170,15 @@ class ParseBase(object):
         return json.loads(await response.read().decode('utf-8'))
 
     @classmethod
-    def GET(cls, uri, **kw):
+    async def GET(cls, uri, **kw):
         return await cls.execute(uri, 'GET', **kw)
 
     @classmethod
-    def POST(cls, uri, **kw):
+    async def POST(cls, uri, **kw):
         return await cls.execute(uri, 'POST', **kw)
 
     @classmethod
-    def PUT(cls, uri, **kw):
+    async def PUT(cls, uri, **kw):
         return await cls.execute(uri, 'PUT', **kw)
 
     @classmethod
@@ -186,7 +206,7 @@ class ParseBatcher(ParseBase):
             return
         queries, callbacks = list(zip(*[m(batch=True) for m in methods]))
         # perform all the operations in one batch
-        responses = async self.execute("", "POST", requests=queries)
+        responses = await self.execute("", "POST", requests=queries)
         # perform the callbacks with the response data (updating the existing
         # objets, etc)
 
